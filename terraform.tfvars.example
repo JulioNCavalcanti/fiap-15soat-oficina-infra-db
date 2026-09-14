@@ -1,0 +1,7 @@
+# Copie para terraform.tfvars (gitignorado) e preencha a senha real.
+# Nunca commitar terraform.tfvars.
+
+aws_region   = "us-east-1"
+project_name = "oficina"
+
+db_password = "<senha-forte-do-rds>"
