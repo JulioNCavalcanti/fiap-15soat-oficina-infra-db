@@ -84,6 +84,36 @@ uma instância RDS dentro dela.
 terraform destroy
 ```
 
+## CI/CD
+
+Workflow em `.github/workflows/terraform.yml`:
+
+| Evento | O que roda |
+|---|---|
+| Pull request | `fmt -check`, `validate`, `plan` — o plano é comentado no próprio PR |
+| Push em `main` | `apply` |
+| Manual (`workflow_dispatch`) | `apply` |
+
+O job de validação roda **sem backend**, então não precisa de credencial: um PR continua sendo
+verificado mesmo com as credenciais do AWS Academy expiradas.
+
+O `apply` está atrelado ao Environment `producao`. Configure nele um revisor obrigatório
+(Settings → Environments) para exigir aprovação humana antes de qualquer mudança.
+
+### Secrets necessários
+
+| Secret | Origem |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | painel do AWS Academy |
+| `AWS_SECRET_ACCESS_KEY` | painel do AWS Academy |
+| `AWS_SESSION_TOKEN` | painel do AWS Academy — credenciais temporárias, expiram em poucas horas |
+| `DB_PASSWORD` | a mesma senha do RDS, usada também pelo repositório da aplicação |
+
+A senha do banco entra como `TF_VAR_db_password` direto no ambiente do job — nunca é escrita em
+arquivo, então não há `terraform.tfvars` no runner para vazar em log ou artefato.
+
+Um `concurrency group` impede duas execuções simultâneas, que disputariam o lock do DynamoDB.
+
 ## Custo
 
 A instância RDS e o armazenamento geram custo enquanto estiverem no ar.
