@@ -6,3 +6,8 @@ output "rds_endpoint" {
 output "rds_port" {
   value = aws_db_instance.oficina.port
 }
+
+output "dynamodb_billing_tabela" {
+  description = "Nome da tabela do Billing"
+  value       = aws_dynamodb_table.billing.name
+}
