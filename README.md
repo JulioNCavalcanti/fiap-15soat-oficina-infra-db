@@ -1,10 +1,10 @@
 # Infraestrutura do Banco de Dados — Oficina Mecânica
 
-> Tech Challenge — FIAP SOAT Fase 3
-> Terraform · AWS · RDS PostgreSQL
+> Tech Challenge — FIAP SOAT Fase 4
+> Terraform · AWS · RDS PostgreSQL · DynamoDB
 
-Provisiona a instância RDS usada pela aplicação
-[`fiap-15soat-oficina-api`](https://github.com/KauaAlmeidaSilveira/fiap-15soat-oficina-api).
+Provisiona os bancos dos microsserviços da Fase 4: uma instância RDS PostgreSQL com um database e um
+usuário por serviço SQL (OS e Execução) e a tabela DynamoDB do Billing.
 
 ## O que este repositório cria
 
@@ -12,6 +12,8 @@ Provisiona a instância RDS usada pela aplicação
 |---|---|
 | `data.tf` | Descobre a VPC e as subnets privadas criadas pelo repositório de Kubernetes |
 | `rds.tf` | Subnet group, security group e a instância PostgreSQL |
+| `databases.tf` | Senhas dos usuários `oficina_os` e `oficina_execucao` (o database e o usuário são criados por `scripts/criar-databases.sh`) |
+| `dynamodb.tf` | Tabela única `oficina-billing`, com o GSI esparso `outbox-pendente` e TTL da inbox |
 
 ## Arquitetura
 
@@ -41,26 +43,25 @@ vivem os nodes do EKS. A instância não é acessível pela internet.
 ## Pré-requisitos
 
 - Credenciais AWS configuradas
-- Bucket `fiap-15soat-oficina-tfstate` e tabela `fiap-15soat-oficina-tflock` já criados
+- Bucket `fiap-15soat-oficina-fase4-tfstate` e tabela `fiap-15soat-oficina-tflock` já criados
 - **A VPC precisa existir**: aplique antes o `fiap-15soat-oficina-infra-k8s`
 
 ## Como aplicar
 
+Na Fase 4 o `apply` é manual (GitHub Actions bloqueado) e faz parte do `scripts/subir-aws.sh` do
+repositório do OS, que também gera a senha do usuário master em `terraform.tfvars` (gitignorado).
+Separadamente:
+
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # preencher db_password
 terraform init
-terraform plan
-terraform apply     # ~10 min
+terraform apply                                # ~10 min
+sh scripts/criar-databases.sh                  # depois do apply, com kubectl apontando para o EKS
 ```
 
-Depois:
-
-```bash
-terraform output rds_endpoint
-```
-
-O valor vai para o GitHub Secret `RDS_ENDPOINT` da aplicação, que o pipeline injeta no `DB_HOST`
-do ConfigMap.
+A RDS é privada, então o Terraform não alcança o PostgreSQL: `criar-databases.sh` roda um pod efêmero
+de `psql` dentro do cluster e cria `oficina_os` e `oficina_execucao`, cada um com usuário dono só do
+próprio database. Os serviços leem a senha do `terraform output senhas_servicos` no deploy.
 
 ## Por que este repositório não depende do state do outro
 
@@ -86,33 +87,10 @@ terraform destroy
 
 ## CI/CD
 
-Workflow em `.github/workflows/terraform.yml`:
-
-| Evento | O que roda |
-|---|---|
-| Pull request | `fmt -check`, `validate`, `plan` — o plano é comentado no próprio PR |
-| Push em `main` | `apply` |
-| Manual (`workflow_dispatch`) | `apply` |
-
-O job de validação roda **sem backend**, então não precisa de credencial: um PR continua sendo
-verificado mesmo com as credenciais do AWS Academy expiradas.
-
-O `apply` está atrelado ao Environment `producao`. Configure nele um revisor obrigatório
-(Settings → Environments) para exigir aprovação humana antes de qualquer mudança.
-
-### Secrets necessários
-
-| Secret | Origem |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | painel do AWS Academy |
-| `AWS_SECRET_ACCESS_KEY` | painel do AWS Academy |
-| `AWS_SESSION_TOKEN` | painel do AWS Academy — credenciais temporárias, expiram em poucas horas |
-| `DB_PASSWORD` | a mesma senha do RDS, usada também pelo repositório da aplicação |
-
-A senha do banco entra como `TF_VAR_db_password` direto no ambiente do job — nunca é escrita em
-arquivo, então não há `terraform.tfvars` no runner para vazar em log ou artefato.
-
-Um `concurrency group` impede duas execuções simultâneas, que disputariam o lock do DynamoDB.
+O workflow `.github/workflows/terraform.yml` (plan em PR, apply em `main` com aprovação no Environment
+`producao`) continua no repositório, mas o GitHub Actions da conta está bloqueado por billing. Na Fase 4
+o `apply` e o `destroy` são manuais, pela conta AWS pessoal do Júlio, com os scripts do repositório do OS
+(`scripts/subir-aws.sh` e `scripts/destruir-aws.sh`).
 
 ## Custo
 
