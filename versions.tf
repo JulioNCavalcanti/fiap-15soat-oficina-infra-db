@@ -6,10 +6,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.60"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   backend "s3" {
-    bucket         = "fiap-15soat-oficina-tfstate"
+    bucket         = "fiap-15soat-oficina-fase4-tfstate"
     key            = "infra-db/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "fiap-15soat-oficina-tflock"
